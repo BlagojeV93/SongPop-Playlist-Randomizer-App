@@ -57,3 +57,8 @@ buck-out/
 
 # CocoaPods
 /ios/Pods/
+
+#built application files
+*.apk
+*.aab
+*.ap_

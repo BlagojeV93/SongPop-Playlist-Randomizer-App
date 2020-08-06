@@ -1,10 +1,7 @@
 import React, { useState, useEffect, useRef } from 'react';
 import { SafeAreaView, TouchableOpacity, Text, Share, ImageBackground, View, ActivityIndicator, Dimensions, Animated, FlatList, Image } from 'react-native';
 
-import RNFS from "react-native-fs";
-
 const fileUri = 'https://songpophost.000webhostapp.com/allPlaylists.txt'
-const filePath = `${RNFS.DocumentDirectoryPath}/playlists.txt`;
 const options = [60, 75, 90, 100, 150];
 const dw = Dimensions.get('window').width
 const dh = Dimensions.get('window').height
@@ -21,7 +18,7 @@ onShare = async (message) => {
 }
 
 const App = () => {
-  const [allPlaylists, setAll] = useState([0])
+  const [allPlaylists, setAll] = useState([])
   const [randomizedPlaylists, choosePlaylists] = useState([]);
   const [indicator, loading] = useState(false);
   const [numberToRandomize, setNumber] = useState(options[0])
@@ -31,32 +28,21 @@ const App = () => {
 
   useEffect(() => {
     loading(true);
-    getFile();
+    getLists();
   }, [])
 
-  const getFile = async () => {
-    try {
-      RNFS.downloadFile({
-        fromUrl: fileUri,
-        toFile: filePath,
-      }).promise.then(async () => {
-        await readFile(filePath);
-      })
-    } catch (e) {
-      alert('Something went wrong. Please restart the app and try again!');
-      console.log(e, "DOWNLOAD")
-    }
-  }
-
-  const readFile = async (uri) => {
-    try {
-      const content = await RNFS.readFile(uri, "utf8");
-      setAll(content.split('•'))
-      loading(false)
-    } catch (e) {
-      alert('Something went wrong. Please restart the app and try again!');
-      console.log(e, "READ")
-    }
+  const getLists = async () => {
+    let content = await fetch(fileUri).then(res => res.text()).catch(e => {
+      if (e.message) {
+        alert(e.message)
+      } else {
+        alert('Something went wrong. Please restart the app and try again!');
+      }
+    });
+    content = content.split('•');
+    content.shift();
+    setAll(content);
+    loading(false)
   }
 
   const randomizePlaylists = () => {
@@ -65,7 +51,7 @@ const App = () => {
     let stateArr = [];
     do {
       let val = allPlaylists[Math.floor(Math.random() * allPlaylists.length)].trim();
-      if (stateArr.indexOf(val) === -1 && val.length > 0) {
+      if (stateArr.indexOf(val) === -1) {
         stateArr.push(val);
       }
     } while (stateArr.length < numberToRandomize);
@@ -106,7 +92,7 @@ const App = () => {
               <View style={styles.firstScreen}>
                 <View style={{ flex: 3, width: '100%' }}>
                   <View style={{ flex: 1, justifyContent: 'center', alignItems: 'center' }}>
-                    <Text style={[styles.numOfPlaylistText, styles.textShadow]}>Total of {allPlaylists.length - 1} playlists loaded!</Text>
+                    <Text style={[styles.numOfPlaylistText, styles.textShadow]}>Total of {allPlaylists.length} playlists loaded!</Text>
                   </View>
                   <Text style={[styles.textShadow, styles.chooseNumberTitle]}>Choose the number of playlists to randomize</Text>
                   <View style={{ flex: 1.5 }}>
