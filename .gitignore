@@ -60,5 +60,6 @@ buck-out/
 
 #built application files
 *.apk
-*.aab
+*.aar
 *.ap_
+*.aab
