@@ -1,8 +1,11 @@
 import React, { useState, useEffect, useRef } from 'react';
-import { SafeAreaView, TouchableOpacity, Text, Share, ImageBackground, View, ActivityIndicator, Dimensions, Animated, FlatList, Image } from 'react-native';
+import { SafeAreaView, TouchableOpacity, Text, Share, ImageBackground, View, ActivityIndicator, Dimensions, Animated, FlatList, Image, Modal } from 'react-native';
 
-const fileUri = 'https://songpophost.000webhostapp.com/allPlaylists.txt'
-const options = [60, 75, 90, 100, 150];
+import ClearCache from 'react-native-clear-cache';
+
+const regularFileUri = 'https://songpophost.000webhostapp.com/allPlaylists.txt';
+const specialUri = 'https://songpophost.000webhostapp.com/special.txt'
+const options = [50, 60, 75, 90, 100, 150];
 const dw = Dimensions.get('window').width
 const dh = Dimensions.get('window').height
 
@@ -18,21 +21,37 @@ onShare = async (message) => {
 }
 
 const App = () => {
-  const [allPlaylists, setAll] = useState([])
+  const [allPlaylists, setAll] = useState([]);
+  const [chosenListsOrdinal, setBool] = useState(0);
+  const [modalVisible, openModal] = useState(false);
   const [randomizedPlaylists, choosePlaylists] = useState([]);
   const [indicator, loading] = useState(false);
   const [numberToRandomize, setNumber] = useState(options[0])
-  const [translateX] = useState(new Animated.Value(0));
+  const [translateXMain] = useState(new Animated.Value(0));
+  const [opacity] = useState(new Animated.Value(0));
+  // const [translateXSpecial] = useState(new Animated.Value(-dw));
 
+  const listsToShow = allPlaylists.length > 0 ? allPlaylists[chosenListsOrdinal].lists : [];
   const flatlist = useRef(null);
 
   useEffect(() => {
+    ClearCache.clearAppCache(data => console.log('cache cleared!'));
     loading(true);
-    getLists();
+    getAllLists();
   }, [])
 
-  const getLists = async () => {
-    let content = await fetch(fileUri).then(res => res.text()).catch(e => {
+  useEffect(() => {
+    if (allPlaylists.length > 1) {
+      Animated.timing(opacity, {
+        toValue: 1,
+        duration: 2000,
+        useNativeDriver: true
+      }).start()
+    }
+  }, [allPlaylists])
+
+  const getAllLists = async () => {
+    let content = await fetch(regularFileUri).then(res => res.text()).catch(e => {
       if (e.message) {
         alert(e.message)
       } else {
@@ -41,16 +60,49 @@ const App = () => {
     });
     content = content.split('•');
     content.shift();
-    setAll(content);
-    loading(false)
+    setAll(prevContent => {
+      let arr = [...prevContent];
+      arr.push({ title: 'Regular Lists', lists: content })
+      return arr;
+    })
+    await getSpecialLists(specialUri);
+    loading(false);
+  }
+
+  const getSpecialLists = async (uri) => {
+    let lists = await fetch(uri).then(res => res.status == 200 ? res.text() : null)
+      .catch(e => {
+        if (e.message) {
+          alert(e.message)
+        } else {
+          alert('Something went wrong. Please restart the app and try again!');
+        }
+      });
+    if (lists) {
+      lists = lists.split('•');
+      lists.shift();
+      const uri = lists[1].trim();
+      const title = lists[0].trim();
+      lists.splice(0, 2);
+
+      setAll(prevContent => {
+        let arr = [...prevContent];
+        arr.push({ title, lists })
+        return arr;
+      })
+
+      if (uri != 'null') {
+        getSpecialLists(uri)
+      }
+    }
   }
 
   const randomizePlaylists = () => {
-    Animated.timing(translateX, { toValue: -dw, useNativeDriver: true }).start();
+    Animated.timing(translateXMain, { toValue: -dw, useNativeDriver: true }).start();
 
     let stateArr = [];
     do {
-      let val = allPlaylists[Math.floor(Math.random() * allPlaylists.length)].trim();
+      let val = listsToShow[Math.floor(Math.random() * listsToShow.length)].trim();
       if (stateArr.indexOf(val) === -1) {
         stateArr.push(val);
       }
@@ -60,7 +112,7 @@ const App = () => {
   }
 
   const randomizeAgain = () => {
-    Animated.timing(translateX, { toValue: 0, useNativeDriver: true }).start();
+    Animated.timing(translateXMain, { toValue: 0, useNativeDriver: true }).start();
     flatlist.current.scrollToOffset({ animated: true, offset: 0 });
   }
 
@@ -69,13 +121,49 @@ const App = () => {
     const borderLeftWidth = i == 0 ? 2 : 1;
     const borderRightWidth = i == options.length - 1 ? 2 : 1;
     return (
-      <TouchableOpacity activeOpacity={0.5} onPress={() => setNumber(opt)} key={i} style={[styles.optionBtn,
+      <TouchableOpacity disabled={opt > listsToShow.length} activeOpacity={0.5} onPress={() => setNumber(opt)} key={i} style={[styles.optionBtn,
       { backgroundColor }, { borderLeftWidth }, { borderRightWidth }
       ]}>
         <Text style={styles.optionNumber}>{opt}</Text>
       </TouchableOpacity>
     )
   })
+
+  const renderModalCont = () => {
+    const titles = allPlaylists.map((e => e.title));
+    return (
+      <View style={styles.modalMainCont}>
+        <Text style={styles.modalTitleText}>You can select one of the active monthly tournaments below and randomize playlists for that special event!</Text>
+        <View style={{ width: '100%' }}>
+          {titles.map((title, i) => {
+            if (i > 0) {
+              const last = i == titles.length - 1;
+              return (
+                <TouchableOpacity onPress={() => {
+                  setBool(i);
+                  openModal(false);
+                  setNumber(options[0])
+                }} key={i} style={[styles.tournamentOptionCont, { borderBottomWidth: last ? 2 : 0, }]}>
+                  <Image style={[styles.buttonImage, { tintColor: 'black' }]} source={require('./cup.png')} />
+                  <Text style={{ fontWeight: 'bold', fontSize: dw * 0.03 }}>{title}</Text>
+                </TouchableOpacity>
+              )
+            }
+          })}
+        </View>
+        <TouchableOpacity onPress={() => {
+          openModal(false);
+          setBool(0);
+          setNumber(options[0])
+        }} style={styles.backToRegularBtn}>
+          <Image style={[styles.buttonImage, { tintColor: 'black' }]} source={require('./back.png')} />
+          <Text style={{ fontWeight: 'bold', fontSize: dw * 0.03 }}>REGULAR LISTS</Text>
+        </TouchableOpacity>
+      </View>
+    )
+  }
+
+  const topListsTitle = chosenListsOrdinal == 0 ? 'Click here for monthly tournaments!' : 'Change playlists'
 
   return (
     <SafeAreaView style={styles.mainContainer}>
@@ -86,15 +174,24 @@ const App = () => {
         </View>
       }
       <ImageBackground style={{ flex: 1 }} resizeMode='contain' source={require('./sppic.png')}>
-        <Animated.View style={[styles.animatedViewStyle, { transform: [{ translateX }] }]}>
+        <Animated.View style={[styles.animatedViewStyle, { transform: [{ translateX: translateXMain }] }]}>
           <View style={{ flex: 1 }}>
+            {allPlaylists.length > 1 &&
+              <Animated.View style={[styles.specialPartiesCont, { opacity }]}>
+                <TouchableOpacity onPress={() => openModal(true)} style={styles.specialPartiesInnerBtn}>
+                  <Image style={[styles.buttonImage, { marginRight: 0 }]} source={require('./cup.png')} />
+                  <Text style={styles.specialOptionText}>{topListsTitle}</Text>
+                  <Image style={[styles.buttonImage, { marginRight: 0 }]} source={require('./cup.png')} />
+                </TouchableOpacity>
+              </Animated.View>
+            }
             {!indicator &&
               <View style={styles.firstScreen}>
                 <View style={{ flex: 3, width: '100%' }}>
                   <View style={{ flex: 1, justifyContent: 'center', alignItems: 'center' }}>
-                    <Text style={[styles.numOfPlaylistText, styles.textShadow]}>Total of {allPlaylists.length} playlists loaded!</Text>
+                    <Text style={[styles.numOfPlaylistText, styles.textShadow]}>Total of {listsToShow.length} playlists loaded!</Text>
                   </View>
-                  <Text style={[styles.textShadow, styles.chooseNumberTitle]}>Choose the number of playlists to randomize</Text>
+                  <Text style={[styles.textShadow, styles.chooseNumberTitle]}>Select the number of playlists to randomize</Text>
                   <View style={{ flex: 1.5 }}>
                     <View style={styles.optionsMainCont}>
                       <View style={styles.optionsInnerCont}>
@@ -136,6 +233,23 @@ const App = () => {
               <Text style={styles.buttonText}>RANDOMIZE AGAIN</Text>
             </TouchableOpacity>
           </View>
+          {modalVisible &&
+            <Modal
+              animationType='fade'
+              transparent={true}
+              visible={modalVisible}
+              onRequestClose={() => {
+                openModal(false)
+              }}
+
+            >
+              <View style={{ flex: 1, backgroundColor: 'rgba(0,0,0,0.8)', justifyContent: 'center', alignItems: 'center' }}>
+                <TouchableOpacity onPress={() => openModal(false)} style={{ flex: 1, width: '100%' }} />
+                {renderModalCont()}
+                <TouchableOpacity onPress={() => openModal(false)} style={{ flex: 1, width: '100%' }} />
+              </View>
+            </Modal>
+          }
         </Animated.View>
       </ImageBackground>
     </SafeAreaView>
@@ -260,7 +374,47 @@ const styles = {
     resizeMode: 'contain',
     tintColor: 'white',
     marginRight: dw * 0.03
-  }
+  },
+  specialPartiesCont: {
+    position: 'absolute',
+    zIndex: 1,
+    alignSelf: 'center',
+    backgroundColor: 'rgba(0,0,0,0.8)'
+  },
+  specialPartiesInnerBtn: {
+    alignItems: 'center',
+    flexDirection: 'row',
+    padding: dh * 0.03
+  },
+  specialOptionText: {
+    color: 'white',
+    fontSize: dw * 0.035,
+    marginHorizontal: dh * 0.03
+  },
+  modalTitleText: {
+    fontSize: dw * 0.04,
+    fontWeight: 'bold',
+    textAlign: 'center',
+    margin: dh * 0.035
+  },
+  modalMainCont: {
+    width: '100%',
+    backgroundColor: 'rgb(220,220,220)'
+  },
+  backToRegularBtn: {
+    width: '100%',
+    flexDirection: 'row',
+    alignItems: 'center',
+    padding: dh * 0.02,
+    backgroundColor: 'rgb(200,200,200)'
+  },
+  tournamentOptionCont: {
+    width: '100%',
+    flexDirection: 'row',
+    borderTopWidth: 2,
+    padding: dh * 0.02,
+    alignItems: 'center'
+  },
 }
 
 
